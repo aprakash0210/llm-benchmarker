@@ -22,16 +22,34 @@ Result vs. hypothesis is reported in Findings once the runs are done.
 - **Controls:** same machine, same flags, same prompts, nothing else on the GPU.
 - **Extension:** 14B model with Q6_K as the baseline (FP16 doesn't fit) vs. Q5_K_M, Q4_K_M, Q3_K_M.
 
-## Results
-_Not yet run._ Table and charts land in `results/`.
+## Sanity Check: Baseline Sample Output
+Informal check that the FP16 GGUF loads and generates coherent text on the GPU. This is **not** benchmark data: sampling was at llama.cpp's default (temperature 0.8), so output varies from run to run, and Qwen2.5-3B is a base model (it continues text rather than answering as an assistant).
 
-| Precision | Size (GB) | Peak VRAM (GB) | Tokens/s | Perplexity | Δ size | Δ speed | Δ perplexity |
-|-----------|-----------|----------------|----------|------------|--------|---------|--------------|
-| FP16      |           |                |          |            | -      | -       | -            |
-| Q8_0      |           |                |          |            |        |         |              |
-| Q5_K_M    |           |                |          |            |        |         |              |
-| Q4_K_M    |           |                |          |            |        |         |              |
-| Q2_K      |           |                |          |            |        |         |              |
+**Command:**
+```
+llama-completion.exe -m models\qwen2.5-3b-f16.gguf -ngl 99 -p "The top reasons why macos is better than windows is" -n 100 -no-cnv
+```
+
+**FP16 output** (the model repeats the prompt, then continues it):
+> The top reasons why macos is better than windows is that macos has the ability to protect you from malware, viruses, and other viruses that windows cannot. Also, macos is the most secure operating system in the world.
+> There are some reasons why macos is better than windows and some reasons why it is not. There is no right or wrong answer. The best OS for you is the one that works best for you. In this blog post, we’ll explore some of the reasons why macOS might be better than Windows. Let’s get started
+
+**Observations:** The model continues the prompt like the start of a blog post instead of answering directly (expected for a base model), and its claims are generic and partly wrong or repetitive ("viruses ... other viruses"). Useful as a qualitative reference to compare against the quantized versions later.
+
+## Results
+The FP16 baseline is fully measured (size, VRAM, speed, perplexity); all quantized rows are pending. Perplexity is `llama-perplexity` on the WikiText-2 test set with default settings (context 512, 584 chunks); the ± is the standard error across chunks. Peak VRAM is the rise above the idle baseline during `llama-bench` (`scripts/measure_vram.ps1`), so it includes weights plus KV cache and compute buffers. Table and charts land in `results/`.
+
+Speed is mean ± standard deviation across repeated `llama-bench` runs, in tokens/s. `pp512` = prompt processing (512 tokens), `tg128` = token generation (128 tokens). Sizes are GiB (2^30 bytes). Δ speed is computed on `tg128`.
+
+| Precision | Size (GiB) | Peak VRAM (GiB) | pp512 (t/s)        | tg128 (t/s)  | Perplexity | Δ size | Δ speed | Δ perplexity |
+|-----------|------------|-----------------|--------------------|--------------|------------|--------|---------|--------------|
+| FP16      | 5.75       | 6.20            | 6062.53 ± 526.86   | 92.50 ± 0.52 | 8.4251 ± 0.0567 | -      | -       | -            |
+| Q8_0      |            |                 |                    |              |            |        |         |              |
+| Q5_K_M    |            |                 |                    |              |            |        |         |              |
+| Q4_K_M    |            |                 |                    |              |            |        |         |              |
+| Q2_K      |            |                 |                    |              |            |        |         |              |
+
+Baseline note: `pp512` varies about 9% between runs (±526.86), while `tg128` is stable (±0.52, about 0.6%). The first run is often slower from GPU warm-up and shader compilation; see Limitations once all runs are in.
 
 ## Findings
 TODO after results.

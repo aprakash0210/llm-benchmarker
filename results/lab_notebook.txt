@@ -1,0 +1,74 @@
+LAB NOTEBOOK - llm-benchmarker
+Paste every command and its raw output below, in order.
+
+=== 2026-10-03: VRAM measurement method ===
+Tool: scripts/measure_vram.ps1 (written and self-tested; not yet run on a model).
+Counter: Windows "GPU Adapter Memory" / "Dedicated Usage", read via .NET PerformanceCounter
+  (Get-Counter blocks ~1 s per call, so it is too slow to catch a peak).
+Adapters seen: two (dedicated GPU ~1.1 GiB at idle, integrated GPU 0 MiB). The script tracks
+  both and reports the adapter whose usage rose the most.
+Procedure per model file:
+  1. Close other GPU programs (browser, games).
+  2. Run the script, wrapping the same llama-bench command used for the speed test:
+       .\scripts\measure_vram.ps1 -Label <quant> -Exe <path>\llama-bench.exe `
+         -Arguments '-m models\<file>.gguf -ngl 99 -p 512 -n 128 -r 3'
+  3. Record: idle, peak, delta (= model VRAM cost). Output also saved in results\logs\<quant>.txt
+     and appended to results\vram_log.csv.
+Self-test (command: ping, no GPU load): idle 1.133 GiB, peak 1.136 GiB, delta 0.003 GiB, 19 samples,
+  exit code 0 -> script logic works; counter noise is about 0.003 GiB.
+
+=== 2026-10-03: FP16 baseline - speed (llama-bench) ===
+Model: models\qwen2.5-3b-f16.gguf (converted from Qwen/Qwen2.5-3B, source dtype bfloat16 -> f16)
+Build: llama.cpp build 11312, commit 0c1e57098 (Vulkan), GPU: AMD Radeon RX 9070 XT
+Command (intended): llama-bench -m models\qwen2.5-3b-f16.gguf -ngl 99 -p 512 -n 128 -r 3
+ 
+Raw output (copied from terminal):
+ggml_vulkan: 0 = AMD Radeon RX 9070 XT (AMD proprietary driver) | uma: 0 | fp16: 1 | bf16: 1 | fp4: 0 | warp size: 64 | shared memory: 32768 | int dot: 1 | matrix cores: KHR_coopmat
+load_backend: loaded Vulkan backend from C:\Users\ayush\OneDrive\Desktop\dev\llama.cpp-vulkan\ggml-vulkan.dll
+load_backend: loaded CPU backend from C:\Users\ayush\OneDrive\Desktop\dev\llama.cpp-vulkan\ggml-cpu-zen4.dll
+| model                          |       size |     params | backend    | ngl |            test |                  t/s |
+| ------------------------------ | ---------: | ---------: | ---------- | --: | --------------: | -------------------: |
+| qwen2 3B F16                   |   5.75 GiB |     3.09 B | Vulkan     |  99 |           pp512 |     6062.53 ± 526.86 |
+| qwen2 3B F16                   |   5.75 GiB |     3.09 B | Vulkan     |  99 |           tg128 |         92.50 ± 0.52 |
+Checks: all 99 layers offloaded to the Vulkan device (GPU used). File size 6,178,316,864 bytes = 5.75 GiB.
+Observation: pp512 varies ~9% (+-526.86); tg128 varies ~0.6% (+-0.52).
+
+
+=== 2026-10-03: FP16 baseline - peak VRAM (scripts/measure_vram.ps1 wrapping llama-bench) ===
+Command:
+  .\scripts\measure_vram.ps1 -Label f16 -Exe C:\Users\ayush\OneDrive\Desktop\dev\llama.cpp-vulkan\llama-bench.exe -Arguments '-m models\qwen2.5-3b-f16.gguf -ngl 99 -p 512 -n 128 -r 3'
+Raw output:
+  label        f16
+  adapter      luid_0x00000000_0x00013DD9_phys_0
+  idle         1.353 GiB
+  peak         7.551 GiB
+  delta        6.198 GiB  <- model VRAM cost (peak - idle)
+  sampling     78 samples every ~100 ms, exit code 0
+llama-bench output from this wrapped run (saved in results\logs\f16.txt; the "Â±" is a text-encoding artifact of the redirected file, it means "±"):
+  | qwen2 3B F16 | 5.75 GiB | 3.09 B | Vulkan | 99 | pp512 | 5570.47 ± 524.83 |
+  | qwen2 3B F16 | 5.75 GiB | 3.09 B | Vulkan | 99 | tg128 |   92.50 ± 0.35 |
+Notes:
+  - Peak VRAM cost (delta) = 6.198 GiB vs file size 5.75 GiB -> ~0.45 GiB overhead (KV cache + compute buffers).
+  - Idle baseline was 1.353 GiB here vs 1.133 GiB in the earlier self-test: idle drifts by ~0.2 GiB between
+    sessions (desktop/other apps), so delta (peak - idle measured right before) is the number to use.
+  - The run lasted ~8 s (78 samples); the model stays allocated for the whole run, so 100 ms sampling is ample.
+  - This second speed run agrees on tg128 (92.50 both times). pp512 came out 5570 vs 6063 earlier, a ~8% gap
+    that is about one standard deviation (+-525); consistent with the run-to-run pp512 variability noted above.
+  - Single VRAM run only. Repeat to see the spread before citing a final number.
+
+=== 2026-10-03: FP16 baseline - perplexity (llama-perplexity) ===
+Command:
+  llama-perplexity.exe -m models\qwen2.5-3b-f16.gguf -f data\wikitext-2-raw\wiki.test.raw -ngl 99
+  (full path: C:\Users\ayush\OneDrive\Desktop\dev\llama.cpp-vulkan\llama-perplexity.exe; stdout+stderr saved to results\logs\f16_perplexity.txt)
+Build: llama.cpp build 11312, commit 0c1e57098 (Vulkan), GPU: AMD Radeon RX 9070 XT. Exit code 0, wall time 1 min 0.9 s.
+Key lines from the raw output:
+  perplexity: tokenization took 240.696 ms
+  perplexity: calculating perplexity over 584 chunks, n_ctx=512, batch_size=2048, n_seq=4
+  perplexity: 0.56 seconds per pass
+  Final estimate: PPL = 8.4251 +/- 0.05666
+Running estimate (per-chunk average) started at [1]6.1010, peaked ~9.5 around chunk 13, and settled to 8.4251 at chunk 584.
+Notes:
+  - Defaults used: context 512 tokens, 584 non-overlapping chunks covering the whole wiki.test.raw file.
+  - The "+/-" is the standard error of the estimate across chunks, not run-to-run noise; the run is deterministic
+    for a given model/build/settings, so repeating should give the same PPL (to be confirmed on a second run).
+  - The "NativeCommandError" text in PowerShell is only stderr from llama.cpp being wrapped by PowerShell, not a failure.

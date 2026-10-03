@@ -33,7 +33,7 @@ Quantization level, and nothing else. Same source FP16 GGUF for every quantized 
 | Metric | How | Notes |
 |--------|-----|-------|
 | File size | filesystem | GB |
-| Peak VRAM | monitoring tool during run (e.g. Adrenalin overlay/logging) | TODO (user decision): choose tool and sampling method |
+| Peak VRAM | `scripts/measure_vram.ps1`: Windows "GPU Adapter Memory / Dedicated Usage" counter, polled every ~100 ms while `llama-bench` runs; reported as peak minus idle baseline (3 s mean before launch) | Wraps the same `llama-bench` command used for speed. Logs to `results/vram_log.csv`. Tracks all adapters, reports the one whose usage rose most (ignores the integrated GPU). Idle baseline on this machine is about 1.1 GiB (Windows + desktop). |
 | Tokens/s | `llama-bench -m <f> -ngl 99 -p 512 -n 128` | 3 runs, averaged (report spread) |
 | Perplexity | `llama-perplexity -m <f> -f wiki.test.raw -ngl 99` | test file from `scripts/get-wikitext-2.sh` |
 
