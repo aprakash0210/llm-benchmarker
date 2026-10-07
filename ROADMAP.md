@@ -1,7 +1,7 @@
 # LLM Benchmarker - Learning Roadmap
 This document tracks progress on the project. Mark things as complete once they are done.
 
-## Active Phase: [ Phase 2 ]
+## Active Phase: [ Phase 3 ]
 
 - [x] **Phase 0: Hypothesis & Setup**
   - [x] Write the hypothesis in `README.md` BEFORE running anything: "Q4_K_M will cut model size by about 70% with under X% quality loss" (choose X yourself)
@@ -15,13 +15,13 @@ This document tracks progress on the project. Mark things as complete once they 
   - [x] Measure speed: `llama-bench -m model-f16.gguf -ngl 99 -p 512 -n 128` (3 runs, averaged)
   - [x] Measure quality: `llama-perplexity -m model-f16.gguf -f wiki.test.raw -ngl 99`
   - [x] Confirm the GPU is actually used (speed sanity check)
-- [ ] **Phase 2: Optimize (after)**
-  - [ ] Create Q8_0, Q5_K_M, Q4_K_M, Q2_K with `llama-quantize` from the FP16 file
-  - [ ] Repeat size / VRAM / speed / perplexity for each file — change nothing else, nothing else running
+- [x] **Phase 2: Optimize (after)**
+  - [x] Create Q8_0, Q5_K_M, Q4_K_M, Q2_K with `llama-quantize` from the FP16 file
+  - [x] Repeat size / VRAM / speed / perplexity for each file — change nothing else, nothing else running
 - [ ] **Phase 3: Analyze**
-  - [ ] Build the table: precision, size, VRAM, tokens/s, perplexity, % change vs. baseline
-  - [ ] Chart size vs. perplexity and speed vs. perplexity
-  - [ ] Pick the "sweet spot" and justify it in 2-3 sentences
+  - [x] Build the table: precision, size, VRAM, tokens/s, perplexity, % change vs. baseline
+  - [x] Chart size vs. perplexity and speed vs. perplexity
+  - [x] Pick the "sweet spot" and justify it in 2-3 sentences
 - [ ] **Phase 4: Write up**
   - [ ] README sections: Goal, Hypothesis, Method, Results table, Chart, Findings, Limitations, How to reproduce
   - [ ] Compare results to the original hypothesis (right or wrong, say so)

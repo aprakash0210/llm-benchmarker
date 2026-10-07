@@ -1,0 +1,6 @@
+﻿quant,file,bytes,gib,pct_of_f16,reduction_pct,seconds
+F16,models\qwen2.5-3b-f16.gguf,6178316864,5.754,100.0,0.0,
+Q8_0,models\qwen2.5-3b-q8_0.gguf,3285475904,3.060,53.2,46.8,20.3
+Q5_K_M,models\qwen2.5-3b-q5_k_m.gguf,2224814656,2.072,36.0,64.0,18.9
+Q4_K_M,models\qwen2.5-3b-q4_k_m.gguf,1929902656,1.797,31.2,68.8,20.2
+Q2_K,models\qwen2.5-3b-q2_k.gguf,1274755648,1.187,20.6,79.4,18.3

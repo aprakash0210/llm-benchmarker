@@ -72,3 +72,54 @@ Notes:
   - The "+/-" is the standard error of the estimate across chunks, not run-to-run noise; the run is deterministic
     for a given model/build/settings, so repeating should give the same PPL (to be confirmed on a second run).
   - The "NativeCommandError" text in PowerShell is only stderr from llama.cpp being wrapped by PowerShell, not a failure.
+
+=== 2026-10-06: Quantization (llama-quantize, from models\qwen2.5-3b-f16.gguf) ===
+Command: .\scripts\quantize_all.ps1   (runs llama-quantize <f16> <out> <TYPE> for Q8_0, Q5_K_M, Q4_K_M, Q2_K)
+Build: llama-quantize from llama.cpp build 11312 (commit 0c1e57098). Per-type output: results\logs\quantize_<TYPE>.txt
+Note: first attempt failed immediately (PowerShell 5.1 treats llama.cpp's stderr as an error under
+  $ErrorActionPreference='Stop'); fixed in the script by relaxing that setting around the native call. No files were produced by it.
+Results (also in results\sizes.csv):
+  FP16    6,178,316,864 bytes  5.754 GiB  100.0%  (baseline)
+  Q8_0    3,285,475,904 bytes  3.060 GiB   53.2%  46.8% smaller   20.3 s
+  Q5_K_M  2,224,814,656 bytes  2.072 GiB   36.0%  64.0% smaller   18.9 s
+  Q4_K_M  1,929,902,656 bytes  1.797 GiB   31.2%  68.8% smaller   20.2 s
+  Q2_K    1,274,755,648 bytes  1.187 GiB   20.6%  79.4% smaller   18.3 s
+Observation: Q4_K_M cut size by 68.8%, close to the hypothesized ~70% (the 4.85 bits/weight estimate gives 69.7%).
+  Effective bits per weight over all 3.09 B params: FP16 16.0, Q8_0 8.5, Q5_K_M 5.8, Q4_K_M 5.0, Q2_K 3.3
+  (above the nominal figures because some tensors stay at higher precision).
+Perplexity/speed/VRAM for the quantized files: not yet measured.
+
+=== 2026-10-06: Benchmark of all quantized files (scripts\benchmark_all.ps1) ===
+Command: .\scripts\benchmark_all.ps1            (then: .\scripts\benchmark_all.ps1 -Types F16 for a same-session baseline)
+Per file, in order: llama-bench -ngl 99 -p 512 -n 128 -r 3 -o csv; scripts\measure_vram.ps1 wrapping the same llama-bench command;
+  llama-perplexity -f data\wikitext-2-raw\wiki.test.raw -ngl 99 (defaults: context 512, 584 chunks).
+Raw output: results\logs\<QUANT>_bench.txt, <QUANT>_vram.txt, <QUANT>_perplexity.txt; summary rows in results\results.csv; VRAM rows in results\vram_log.csv.
+Build: llama.cpp build 11312, commit 0c1e57098 (Vulkan), GPU: AMD Radeon RX 9070 XT.
+Summary (results\results.csv):
+  quant   size_gib  vram_delta  pp512 t/s         tg128 t/s        perplexity
+  F16     5.754     6.183       6295.82 +-427.10   91.64 +-0.45     8.4251 +-0.05666
+  Q8_0    3.060     3.493       7003.96 +-552.93  152.17 +-1.21     8.4371 +-0.05675
+  Q5_K_M  2.072     2.509       5026.22 +-1834.27 211.93 +-2.79     8.5380 +-0.05757
+  Q4_K_M  1.797     2.217       5972.47 +-614.87  233.37 +-5.73     8.7968 +-0.05957
+  Q2_K    1.187     1.622       4233.53 +-17.56   263.69 +-43.09    21918.2463 +-208.73952
+Issues and checks:
+  - A first trial run on Q4_K_M only printed numbers like "6,038.45" (thousands separator broke the CSV); fixed the format string,
+    deleted that trial row and its logs, and ran everything again. The reported results are from the clean runs.
+  - Idle VRAM during these runs was ~2.92-2.97 GiB, vs 1.35 GiB on 2026-10-03. Per-process listing showed dwm (~2.5 GiB), a QML renderer
+    (~1.2 GiB), Brave, Battle.net, Steam web helper, Discord, wallpaper64 and VS Code using GPU memory. They were NOT closed for these runs.
+    VRAM "delta" subtracts idle, so it is unaffected by steady use, but background GPU load is an uncontrolled factor for speed.
+  - Same-session FP16 rerun vs 2026-10-03 baseline: tg128 91.64 vs 92.50, pp512 6296 vs 6063, VRAM delta 6.183 vs 6.198, perplexity identical (8.4251).
+  - Q2_K perplexity 21918 is implausible as "slightly worse": checked generation with llama-completion --temp 0 on the prompt
+    "The capital of France is": output is garbage punctuation both with -ngl 99 (GPU) and -ngl 0 (CPU) -> the Q2_K model itself is broken.
+  - Perplexity per chunk for Q2_K started at ~14,900 on chunk 1 and stayed in the high teens/20 thousands.
+  - Single run per file; pp512 variance is large, tg128 is stable for all files except Q2_K (+-43).
+
+=== 2026-10-06: Charts (scripts\make_charts.py) ===
+Command: .\venv\Scripts\python.exe scripts\make_charts.py   (reads results\results.csv; needs matplotlib and pandas, installed into the project venv)
+Output: results\charts\size_vs_perplexity.png, results\charts\speed_vs_perplexity.png (embedded in README under "Charts").
+Design decisions: two panels per figure (all five files on a log axis; four usable files on a linear axis) because Q2_K's perplexity
+  (21,918) is ~2,600x the baseline's and would squash the other points on a single axis. Q5_K_M highlighted as the sweet spot.
+  Error bars: vertical = perplexity standard error across chunks; horizontal (speed chart) = standard deviation of 3 runs.
+Issues: first render had overlapping labels (Q4_K_M/Q5_K_M/Q8_0 in the log panel, Q5_K_M label over the y-axis label, Q2_K label over
+  the panel title). Fixed by labeling only Q2_K in the log panels plus a text note for the cluster, and moving labels in the zoom panels.
+  An intermediate edit left a syntax error in the script; that was fixed and the charts were regenerated and re-checked by eye.
