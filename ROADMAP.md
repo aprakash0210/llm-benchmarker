@@ -23,8 +23,8 @@ This document tracks progress on the project. Mark things as complete once they 
   - [x] Chart size vs. perplexity and speed vs. perplexity
   - [x] Pick the "sweet spot" and justify it in 2-3 sentences
 - [ ] **Phase 4: Write up**
-  - [ ] README sections: Goal, Hypothesis, Method, Results table, Chart, Findings, Limitations, How to reproduce
-  - [ ] Compare results to the original hypothesis (right or wrong, say so)
+  - [x] README sections: Goal, Hypothesis, Method, Results table, Chart, Findings, Limitations, How to reproduce
+  - [x] Compare results to the original hypothesis (right or wrong, say so)
   - [ ] Only after all of the above, add the resume bullet with real numbers
 - [ ] **Phase 5 (Extension): 14B model**
   - [ ] Repeat with a 14B model; baseline is Q6_K (state this in the README)s

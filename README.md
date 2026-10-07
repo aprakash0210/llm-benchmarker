@@ -70,8 +70,26 @@ Each chart has two panels because Q2_K's perplexity (21,918) is about 2,600x the
 - **Speed:** token generation speed rises steadily as files shrink (91.6 t/s at FP16 up to 233 t/s at Q4_K_M), because generation is limited by how fast weights can be read from memory. The gain is smaller than the size reduction, so it is not purely proportional.
 - **Open question:** on a 16 GB GPU the 3B model fits at every level, so this sweet spot is about efficiency. Which level is best for the largest model that fits is tested by the 14B extension.
 
+## Recommendations: which quantization to use
+Evidence is from the results table above (Qwen2.5-3B, RX 9070 XT, llama.cpp Vulkan build 11312). Which level is "best" depends on what you are optimizing for.
+
+| If you need... | Use | Evidence |
+|---|---|---|
+| **A good default** (best balance of memory, speed, and quality) | **Q5_K_M** | 2.51 GiB VRAM (59% less than FP16), +1.3% perplexity, 212 t/s (2.3x FP16). Dropping one more step to Q4_K_M saves only 0.29 GiB more VRAM for about 2.5x the quality loss of the previous step. |
+| **Near-lossless quality** with a big memory saving | **Q8_0** | +0.1% perplexity (8.4371 vs. 8.4251, well inside the error bars), 3.49 GiB VRAM (44% less than FP16), 152 t/s (1.7x FP16). |
+| **The smallest and fastest model that is still usable** | **Q4_K_M** | 1.80 GiB file, 2.22 GiB VRAM (64% less than FP16), 233 t/s (2.5x FP16), +4.4% perplexity. Choose it when memory or speed is tight and a few percent of quality is acceptable. |
+| **The original model's exact weights** (research, fine-tuning, a reference to compare against) | FP16 | It is the baseline by definition. For inference alone it is hard to justify: Q8_0 is within 0.14% perplexity at roughly half the memory and 1.7x the speed. |
+| **Anything at all** | **Avoid Q2_K** | Perplexity 21,918 and garbage output (also on CPU), despite being the smallest (1.19 GiB) and fastest (264 t/s). Size and speed mean nothing when the output is unusable. |
+
+**What this does not tell you:** whether the same ranking holds for a larger model. On a 16 GB GPU the 3B model fits at every level, so these choices are about efficiency, not about fitting. The practical question (the largest model that fits comfortably) needs the 14B extension. As a rough, unmeasured estimate from this model's effective bits per weight (about 5.0 for Q4_K_M and 5.8 for Q5_K_M), a 14B model would need roughly 9 to 11 GB for weights alone at those levels, before KV cache and overhead. That suggests they would fit in 16 GB, but this has to be measured, not assumed.
+
 ## Limitations
-TODO after results (single machine, single model family, single perplexity dataset, etc.).
+- **One model, one family, one size.** Everything is Qwen2.5-3B (a base model). The shape of the curve, and especially how badly Q2_K fails, may differ for larger or instruction-tuned models, so these results should not be assumed to transfer.
+- **Few repetitions for speed and VRAM.** Each file got one `llama-bench` run (3 repetitions inside it) and one VRAM measurement. Prompt-processing speed (`pp512`) was very noisy (for example ±1,834 on Q5_K_M), so differences in that column are not reliable, and `tg128` for Q2_K had ±43. Perplexity is deterministic (FP16 gave exactly 8.4251 on two separate runs), so it did not need repeating. The only cross-session repeat was FP16, which agreed within about 1% on generation speed and VRAM.
+- **Imperfect controls.** Other programs were using the GPU during the runs (browser, Discord, Steam, Battle.net, Wallpaper Engine, and more), and idle VRAM was about 2.9 GiB versus 1.35 GiB on an earlier day. VRAM cost subtracts the idle level, which removes steady background use, but the background load is an uncontrolled factor for speed. The runs were not repeated with those programs closed.
+- **Default quantization only.** Files were made with `llama-quantize` defaults, with no importance matrix. Low-bit quantization is commonly reported to improve with one, so Q2_K's failure may be partly a result of this choice and not an inherent limit of 2-bit weights.
+- **Hardware- and build-specific, and a short context.** Speeds are for an AMD RX 9070 XT on the Vulkan backend (llama.cpp build 11312); other GPUs, backends, or CPUs will give different numbers. The benchmark used a 512-token prompt and 128 generated tokens, so the KV cache stayed small (about 0.03 GiB); VRAM cost would rise with longer contexts.
+- **VRAM method.** Measured as the rise in the Windows dedicated GPU memory counter during `llama-bench`, sampled every ~100 ms. It includes everything the process allocated (weights, KV cache, compute buffers, driver allocations), not just weights.
 
 ## How to Reproduce
 See `PROJECT_SPEC.md` for the exact commands and settings.
